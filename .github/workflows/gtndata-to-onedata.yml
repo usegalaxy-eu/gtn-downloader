@@ -1,0 +1,64 @@
+name: GTN downloader
+
+on:
+  schedule:
+    - cron: 30 23 1 * * # minute hour month-day month week-day
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  execute_script:
+    runs-on: ubuntu-latest
+
+    env:
+      ONECLIENT_ACCESS_TOKEN: ${{ secrets.ONECLIENT_ACCESS_TOKEN }}
+      ONECLIENT_PROVIDER_HOST: ${{ secrets.ONECLIENT_PROVIDER_HOST }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clone another repository
+        uses: actions/checkout@v4
+        with:
+          repository: galaxyproject/training-material
+          path: $GITHUB_WORKSPACE/training-material
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.8
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Create directory for mount
+        run: mkdir -p $HOME/remote_storage_mount
+
+      - name: Install Oneclient
+        run: |
+          curl -sS http://get.onedata.org/oneclient.sh | bash
+
+      - name: Set up environment variables
+        run: |
+          export ONECLIENT_ACCESS_TOKEN=$ONECLIENT_ACCESS_TOKEN
+          export ONECLIENT_PROVIDER_HOST=$ONECLIENT_PROVIDER_HOST
+
+      - name: Mount remote storage
+        run: |
+          oneclient $HOME/remote_storage_mount
+
+      - name: Run python GTN-downloader script
+        run: |
+          python bin/data-library-download.py --input $GITHUB_WORKSPACE/training-material --output $HOME/remote_storage_mount/GTN\ data
+
+      - name: Unmount remote storage
+        run: |
+          fusermount -uz $HOME/remote_storage_mount
