@@ -4,14 +4,6 @@ on:
   schedule:
     - cron: 30 23 1 * * # minute hour month-day month week-day
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
 jobs:
   execute_script:
     runs-on: ubuntu-latest
