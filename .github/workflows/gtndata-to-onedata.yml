@@ -20,11 +20,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clone another repository
-        uses: actions/checkout@v4
-        with:
-          repository: galaxyproject/training-material
-          path: $GITHUB_WORKSPACE
+      - name: Clone the training-material repo
+        run: |
+          git clone https://github.com/galaxyproject/training-material.git
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -48,7 +46,7 @@ jobs:
 
       - name: Run python GTN-downloader script
         run: |
-          python bin/data-library-download.py --input $GITHUB_WORKSPACE/training-material --output $HOME/remote_storage_mount/GTN\ data
+          python bin/data-library-download.py --input training-material --output $HOME/remote_storage_mount/GTN\ data
 
       - name: Unmount remote storage
         run: |
