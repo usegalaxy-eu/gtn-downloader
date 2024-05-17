@@ -24,10 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: galaxyproject/training-material
-          path: $GITHUB_WORKSPACE/training-material
-
-      - name: DEBUG ls training-material 1
-        run: ls $GITHUB_WORKSPACE/training-material
+          path: $GITHUB_WORKSPACE
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,21 +42,13 @@ jobs:
         run: |
           curl -sS http://get.onedata.org/oneclient.sh | bash
 
-      - name: Set up environment variables
-        run: |
-          export ONECLIENT_ACCESS_TOKEN=$ONECLIENT_ACCESS_TOKEN
-          export ONECLIENT_PROVIDER_HOST=$ONECLIENT_PROVIDER_HOST
-
       - name: Mount remote storage
         run: |
           oneclient $HOME/remote_storage_mount
 
-      - name: DEBUG ls training-material 2
-        run: ls $GITHUB_WORKSPACE/training-material
-
-      #- name: Run python GTN-downloader script
-      #  run: |
-      #    python bin/data-library-download.py --input $GITHUB_WORKSPACE/training-material --output $HOME/remote_storage_mount/GTN\ data
+      - name: Run python GTN-downloader script
+        run: |
+          python bin/data-library-download.py --input $GITHUB_WORKSPACE/training-material --output $HOME/remote_storage_mount/GTN\ data
 
       - name: Unmount remote storage
         run: |
