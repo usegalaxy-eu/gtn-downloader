@@ -23,6 +23,9 @@ jobs:
           repository: galaxyproject/training-material
           path: $GITHUB_WORKSPACE/training-material
 
+      - name: DEBUG ls training-material 1
+        run: ls $GITHUB_WORKSPACE/training-material
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -48,7 +51,7 @@ jobs:
         run: |
           oneclient $HOME/remote_storage_mount
 
-      - name: DEBUG ls training-material
+      - name: DEBUG ls training-material 2
         run: ls $GITHUB_WORKSPACE/training-material
 
       #- name: Run python GTN-downloader script
