@@ -5,6 +5,7 @@ import yaml
 import ftplib
 import shutil
 import requests
+import time
 from urllib.parse import urlparse, unquote, quote
 from requests.exceptions import RequestException, Timeout, ConnectionError, HTTPError
 
@@ -14,6 +15,9 @@ SPACE_ID = os.environ.get("ONEPROVIDER_SPACE_ID")
 ROOT_ID = os.environ.get("ONEPROVIDER_ROOT_ID")
 TOKEN = os.environ.get("ONEPROVIDER_REST_ACCESS_TOKEN")
 TMP_DIR = "/tmp/gtn-api-upload"
+HTTP_DOWNLOAD_RETRIES = int(os.environ.get("HTTP_DOWNLOAD_RETRIES", "3"))
+HTTP_RETRY_BACKOFF_SECONDS = int(os.environ.get("HTTP_RETRY_BACKOFF_SECONDS", "20"))
+HTTP_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 # Utility helpers
@@ -29,7 +33,7 @@ def sanitize_name(name: str) -> str:
 def get_safe_filename_from_url(url):
     """Extract correct filename from URL, handling Zenodo /content links."""
     parsed = urlparse(url)
-    parts = parsed.path.split("/")
+    parts = [part for part in parsed.path.split("/") if part]
     if parts[-1] == "content" and len(parts) > 1:
         filename = parts[-2]
     else:
@@ -144,22 +148,61 @@ def download_http(download_url, dest_path):
     """Download a file via HTTP/HTTPS."""
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     print(f"➡️ HTTP download: {download_url}")
-    with requests.get(download_url, stream=True, timeout=(10, 120)) as r:
-        if r.status_code in (403, 404):
-            print(f"🚫 Skipping ({r.status_code}): {download_url}")
-            return None
-        r.raise_for_status()
-        with open(dest_path, "wb") as f:
-            downloaded = 0
-            for chunk in r.iter_content(chunk_size=512 * 1024):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if downloaded >= 100 * 1024 * 1024:
-                        print(f"📥 Downloaded {downloaded / (1024**2):.1f} MB...")
-                        downloaded = 0
-    print(f"✅ Downloaded: {dest_path}")
-    return dest_path
+    for attempt in range(1, HTTP_DOWNLOAD_RETRIES + 1):
+        if os.path.isfile(dest_path):
+            os.remove(dest_path)
+
+        try:
+            with requests.get(download_url, stream=True, timeout=(10, 120)) as r:
+                if r.status_code in (403, 404):
+                    print(f"🚫 Skipping ({r.status_code}): {download_url}")
+                    return None
+
+                if r.status_code in HTTP_RETRY_STATUS_CODES:
+                    raise HTTPError(
+                        f"{r.status_code} transient error for url: {download_url}",
+                        response=r,
+                    )
+
+                r.raise_for_status()
+                with open(dest_path, "wb") as f:
+                    downloaded = 0
+                    for chunk in r.iter_content(chunk_size=512 * 1024):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if downloaded >= 100 * 1024 * 1024:
+                                print(
+                                    f"📥 Downloaded {downloaded / (1024**2):.1f} MB..."
+                                )
+                                downloaded = 0
+
+            print(f"✅ Downloaded: {dest_path}")
+            return dest_path
+
+        except (Timeout, ConnectionError, HTTPError, RequestException) as e:
+            is_retryable = not isinstance(e, HTTPError)
+            if isinstance(e, HTTPError) and e.response is not None:
+                is_retryable = e.response.status_code in HTTP_RETRY_STATUS_CODES
+
+            if not is_retryable:
+                print(f"🚫 Skipping non-retryable HTTP error: {e}")
+                return None
+
+            if attempt >= HTTP_DOWNLOAD_RETRIES:
+                print(
+                    f"⚠️ Giving up after {HTTP_DOWNLOAD_RETRIES} HTTP download attempts: {download_url}"
+                )
+                return None
+
+            wait_seconds = HTTP_RETRY_BACKOFF_SECONDS * attempt
+            print(
+                f"⚠️ HTTP download failed on attempt {attempt}/{HTTP_DOWNLOAD_RETRIES}: {e}"
+            )
+            print(f"🔁 Retrying in {wait_seconds}s...")
+            time.sleep(wait_seconds)
+
+    return None
 
 
 def download_ftp(download_url, dest_path):
